@@ -25,7 +25,7 @@ typedef enum{
 }RTOS_Error_ID;
 
 
-RTOS_Error_ID RTOS_init();
+
 
 
 
@@ -43,5 +43,9 @@ typedef struct{
 
 }TCB_RTOS;
 
+RTOS_Error_ID RTOS_init();
 RTOS_Error_ID RTOS_Create_Task(TCB_RTOS* Task);
+RTOS_Error_ID RTOS_Activate_Task(TCB_RTOS* Task);
+RTOS_Error_ID RTOS_Terminate_Task(TCB_RTOS* Task);
+RTOS_Error_ID RTOS_Start();
 #endif /* INC_SCH_H_ */

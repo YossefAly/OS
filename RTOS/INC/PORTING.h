@@ -50,9 +50,9 @@ extern  int _eheap;
 											 "MSR CONTROL,R0");\
 
 
-
-
-
+void trigger_PendSV();
+unsigned char SysTickLED ;
+void Start_Ticker();
 
 
 #endif /* INC_PORTING_H_ */

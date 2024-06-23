@@ -8,7 +8,7 @@
 #include "SCH.h"
 #include "RTOSFIFO.h"
 
-struct{
+static struct{
 
 	TCB_RTOS* OSTasks[Tasks];//SCH Table
 	unsigned int _S_MSP_TASK;
@@ -21,9 +21,32 @@ struct{
 
 }OS_Control;
 
+typedef enum{Activate,Terminate,Wait}SVC_ID;
+
 Queue_t Ready_Queue;
 TCB_RTOS* Ready_Queue_FIFO[Tasks];
 
+void Bubble_Sort(){
+
+	 int i, j;
+	    char swapped;
+	    for (i = 0; i < Tasks - 1; i++) {
+	        swapped = 0;
+	        for (j = 0; j < Tasks - i - 1; j++) {
+	            if (OS_Control.OSTasks[j]->Priority > OS_Control.OSTasks[j+1]->Priority) {
+	            	TCB_RTOS* temp = OS_Control.OSTasks[j];
+	            	OS_Control.OSTasks[j] =  OS_Control.OSTasks[j+1];
+	            	OS_Control.OSTasks[j+1] = temp;
+	                swapped = 1;
+	            }
+	        }
+
+	        // If no two elements were swapped
+	        // by inner loop, then break
+	        if (swapped == 0)
+	            break;
+	    }
+}
 
 /*Excute specific  OS service*/
 void SVC_Handler_C(int * SFargs){
@@ -36,15 +59,20 @@ void SVC_Handler_C(int * SFargs){
 	switch (SvcNumber){
 
 	case 0://Activate Task
-
+			RTOS_Update_SCH();//Update Table
+			if(OS_Control.OS_mode == OS_run){
+				if(strcmp(OS_Control.CurrentTask->TaskName,"IdleTask")!=0)
+					Next();
+				 trigger_PendSV();
+			}
 		break;
 
 	case 1://Terminate Task
-
+				trigger_PendSV();
 		break;
 
-	case 2:
-
+	case 2://Wait Task
+				trigger_PendSV();
 		break;
 
 	case 3:
@@ -57,16 +85,40 @@ void SVC_Handler_C(int * SFargs){
 
 	}
 }
+void Next(){
+	//if Ready Queue is empty && OS_Control->currentTask != suspend
+		if (Ready_Queue.elements == 0 && OS_Control.CurrentTask->TaskState != Suspended) //Queue_EMPTY
+		{
+			OS_Control.CurrentTask->TaskState = Running ;
+			//add the current task again(round robin)
+			Queue_dequeue(&Ready_Queue, &OS_Control.CurrentTask);
+			OS_Control.NextTask = OS_Control.CurrentTask ;
+		}else
+		{
+			Queue_dequeue(&Ready_Queue, &OS_Control.NextTask);
+			OS_Control.NextTask->TaskState = Running ;
+			//update Ready queue (to keep round robin Algo. happen)
+			if ((OS_Control.CurrentTask->Priority == OS_Control.NextTask->Priority )&&(OS_Control.CurrentTask->TaskState != Suspended))
+			{
+				Queue_dequeue(&Ready_Queue, &OS_Control.CurrentTask);
+				OS_Control.CurrentTask->TaskState = Ready ;
+			}
+		}
+}
 
-void OS_SVC_SET(int SVC_ID){
+void RTOS_SVC_SET(SVC_ID ID){
 
-	switch(SVC_ID){
+	switch(ID){
 
-	case 1:
+	case Activate:
+
+		 __asm("SVC 0x00");
+		break;
+	case Terminate:
 
 		 __asm("SVC 0x01");
 		break;
-	case 2:
+	case Wait:
 		 __asm("SVC 0x02");
 		break;
 	case 3:
@@ -78,7 +130,90 @@ void OS_SVC_SET(int SVC_ID){
 }
 
 
-void PendSV_Handler(){
+
+__attribute ((naked)) void PendSV_Handler()
+{
+	//====================================
+	//Save the Context of the Current Task
+	//====================================
+	//Get the Current Task "Current PSP from CPU register" as CPU Push XPSR,.....,R0
+	GET_OS_PSP(OS_Control.CurrentTask->_C_PSP);
+
+	//using this _C_PSP (Pointer) to store (R4 to R11)
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r4 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r5 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r6 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r7 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r8 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r9 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r10 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP-- ;
+	__asm volatile("mov %0,r11 "
+			: "=r" (*(OS_Control.CurrentTask->_C_PSP))  );
+
+	//save the current Value of PSP
+	//already saved in _C_PSP
+
+
+
+	//====================================
+	//Restore the Context of the Next Task
+	//====================================
+	if (OS_Control.NextTask != NULL){
+	OS_Control.CurrentTask = OS_Control.NextTask ;
+	OS_Control.NextTask = NULL ;
+	}
+
+	__asm volatile("mov r11,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r10,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r9,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r8,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r7,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r6,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r5,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+	__asm volatile("mov r4,%0 "
+			:
+			: "r" (*(OS_Control.CurrentTask->_C_PSP))  );
+	OS_Control.CurrentTask->_C_PSP++ ;
+
+	//update PSP and exit
+	SET_OS_PSP(OS_Control.CurrentTask->_C_PSP);
+	__asm volatile("BX LR");
 
 }
 
@@ -93,11 +228,13 @@ void RTOS_Create_MStack(){
 	#endif
 }
 
+unsigned char IdleTaske;
 void IdleTask(){
-
-	__asm(	"IDLE: \n\t"\
-			"NOP \n\t"\
-			"B IDLE");
+	IdleTaske^=1;
+	while(1){
+		IdleTaske^=1;
+	__asm("NOP \n\t");
+	}
 
 }
 
@@ -173,9 +310,97 @@ RTOS_Error_ID RTOS_Create_Task(TCB_RTOS* Task){
 
 	//Create Task PSP Stack
 	RTOS_Create_Stack(Task);
+
+	OS_Control.OSTasks[OS_Control.NumberOfActiveTasks] = Task;
+	OS_Control.NumberOfActiveTasks++;
 	//Task State update
 	Task->TaskState=Suspended;
 
 	return Status;
 }
+RTOS_Error_ID RTOS_Activate_Task(TCB_RTOS* Task){
+
+	RTOS_Error_ID Status = success ;
+
+	Task->TaskState = Waiting ;
+
+	RTOS_SVC_SET(Activate);
+
+	return Status;
+}
+RTOS_Error_ID RTOS_Terminate_Task(TCB_RTOS* Task){
+
+	RTOS_Error_ID Status = success ;
+
+
+	Task->TaskState = Suspended ;
+
+	return Status;
+
+}
+void RTOS_Update_SCH(){
+
+	TCB_RTOS* temp = NULL;
+
+	TCB_RTOS * Current;
+	TCB_RTOS * next;
+
+
+	int i = 0;
+
+	//Bubble sort the priority
+	Bubble_Sort();
+	//Empty Ready Queue
+	while(Queue_dequeue(&Ready_Queue, &temp) != Queue_Empty);
+
+	//Update Ready Queue
+
+	while(i < OS_Control.NumberOfActiveTasks){
+
+		Current = OS_Control.OSTasks[i];
+		next = OS_Control.OSTasks[i+1];
+
+		if(Current->TaskState != Suspended){
+
+			if(next->TaskState == Suspended){
+
+				Queue_enqueue(&Ready_Queue, Current);
+				Current->TaskState = Ready;
+				break;
+			}
+			if(Current->Priority <= next -> Priority){
+
+				Queue_enqueue(&Ready_Queue, Current);
+				Current->TaskState = Ready;
+			}
+
+
+
+		i++;
+
+	}
+
+	}
+}
+
+RTOS_Error_ID RTOS_Start(){
+
+	OS_Control.OS_mode = OS_run ;
+	//Set Default "Current Task =Idle Task"
+	OS_Control.CurrentTask = Ready_Queue_FIFO[0] ;
+	//Activate IDLE Task
+	RTOS_Activate_Task(Ready_Queue_FIFO[0]);
+	//Start Ticker
+	Start_Ticker(); // 1ms
+
+	SET_OS_PSP(OS_Control.CurrentTask->_C_PSP);
+	//Switch Thread Mode SP from MSP to PSP
+	SET_MSP_PSP;
+	SWITCH_CPU_ACCESS_unpriveleged;
+	Ready_Queue_FIFO[0]->p_TaskEntry();
+
+}
+
+
+
 
