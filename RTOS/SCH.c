@@ -84,8 +84,8 @@ void PendSV_Handler(){
 
 void RTOS_Create_MStack(){
 
-	OS_Control._S_MSP_TASK = 0x20005000;
-	OS_Control._E_MSP_TASK = OS_Control._S_MSP_TASK - 5000;
+	OS_Control._S_MSP_TASK = &_estack;
+	OS_Control._E_MSP_TASK = OS_Control._S_MSP_TASK - MainStackSize;
 	OS_Control.PSP_Task_Locator = (OS_Control._E_MSP_TASK - 8);
 	unsigned int Value = OS_Control._E_MSP_TASK;
 	#if (Value <  _eheap)
