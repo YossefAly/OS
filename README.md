@@ -5,4 +5,4 @@ A Real-Time Operating System (RTOS) is an operating system designed to manage ha
 
 Skills: C / ARM Cortex-M Assembly / DSA 
 
-- 🔭 I’m currently working on RTOS 
+- 🔭 I’m currently working on this RTOS 
