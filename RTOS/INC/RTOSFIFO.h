@@ -11,21 +11,22 @@
 #include "stdio.h"
 #include "SCH.h"
 /*User Config */
-typedef TCB_RTOS* type_t;
+#define  type_t TCB_RTOS*
 /*Type definitions*/
 typedef struct{
-	unsigned int length;
 	unsigned int elements;
 	type_t* head;
 	type_t* base;
 	type_t* tail;
+	unsigned int length;
 }Queue_t;
 
 typedef enum{
-	Queue_Work,
-	Queue_Null,
-	Queue_Full,
-	Queue_Empty
+	FIFO_NO_ERROR,
+	FIFO_FULL,
+	FIFO_EMPTY,
+	FIFO_NULL,
+
 }Queue_t_Status;
 
 /*APIS*/

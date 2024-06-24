@@ -8,51 +8,34 @@
 #ifndef INC_PORTING_H_
 #define INC_PORTING_H_
 
-#include "ARMCM3.h"
-
-extern  int _estack;
-
-extern  int _eheap;
+#include "core_cm3.h"
 
 
-#define MainStackSize 5000
+extern int _estack ;
+extern int _eheap  ;
+#define MainStackSize 	3072
 
 
-#define SET_OS_PSP(ADD) __asm volatile("mov R0,%0 \n\t" \
-										"msr PSP,R0" \
-										:\
-										:"r" (ADD) )
+#define SET_OS_PSP(add)              __asm volatile("mov r0,%0 \n\t msr PSP,r0" : : "r" (add) )
+#define GET_OS_PSP(add)              __asm volatile("mrs r0,PSP \n\t mov %0,r0"   : "=r" (add) )
 
-#define GET_OS_PSP(ADD) __asm volatile("mrs R0,PSP \n\t" \
-										"mov %0,R0" \
-										:"=r" (ADD))
-
-//Set bit 1 in Control register
-#define SET_MSP_PSP __asm("mrs R0,CONTROL \n\t" \
-						  "mov R1,#0x02 \n\t "\
-						  "orr R0,R1,R0 \n\t "\
-						  "msr CONTROL,R0")
-
-//Clear bit 1 in Control register
-#define SET_PSP_MSP __asm( "mrs R0,CONTROL \n\t" \
-						  "mov R1,#0xFFFFFFFD \n\t "\
-						  "and R0,R1,R0 \n\t "\
-						  "msr CONTROL,R0")
+#define SET_MSP_PSP          __asm volatile("mrs r0, CONTROL \n\t mov r1,#0x02 \n\t orr r0,r0,r1 \n\t msr CONTROL,r0")
+#define SET_PSP_MSP          __asm volatile("mrs r0, CONTROL \n\t mov r1,#0x05 \n\t and r0,r0,r1 \n\t msr CONTROL,r0")
 
 
-//Clear bit 0 in Control register
-#define SWITCH_CPU_ACCESS_priveleged  __asm("MRS R0,CONTROL \n\t "\
-			  	  	  	  	  	  	  	  	"AND R0,R0,#0xFFFFFFFFE \n\t"\
-											"MSR CONTROL,R0");\
-//Set bit 0 in Control register
-#define SWITCH_CPU_ACCESS_unpriveleged __asm("MRS R0,CONTROL \n\t "\
-			  	  	  	  	  	  	  	  	 "ORR R0,R0,#0x01 \n\t"\
-											 "MSR CONTROL,R0");\
 
+//clear Bit 0 CONTROL register
+#define SWITCH_CPU_ACCESS_priveleged   		__asm(" mrs r3, CONTROL  \n\t" \
+										" lsr r3,r3,#0x1   \n\t"       \
+										" lsl r3,r3,#0x1   \n\t"	   \
+										" msr CONTROL, r3");
 
-void trigger_PendSV();
-unsigned char SysTickLED ;
+//set Bit 0 CONTROL register
+#define SWITCH_CPU_ACCESS_unpriveleged		__asm(" mrs r3, CONTROL  \n\t" \
+											  " orr r3,r3,#0x1   \n\t" \
+											  " msr CONTROL, r3 ");
+
+void trigger_OS_PendSV();
 void Start_Ticker();
-
 
 #endif /* INC_PORTING_H_ */
