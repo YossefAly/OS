@@ -123,7 +123,7 @@ void MYRTOS_IdleTask()
 	while(1)
 	{
 		IdleTaskLed ^= 1 ;
-		__asm("wfe");
+ 		__asm("wfe");
 	}
 
 }
@@ -270,7 +270,7 @@ void bubbleSort()
 
 }
 //Handler
-void MyRTOS_Update_Schadule_tables()
+void MyRTOS_Update_Sch()
 {
 	TCB_RTOS* temp =NULL ;
 	TCB_RTOS* Ptask ;
@@ -364,7 +364,7 @@ void OS_SVC(int* Stack_Frame)
 	case SVC_Activatetask:
 	case SVC_terminateTask:
 		//Update Sch Table, Ready Queue
-		MyRTOS_Update_Schadule_tables();
+		MyRTOS_Update_Sch();
 		//OS is in Running State
 		if (OS_Control.OSmodeID == OsRunning)
 		{
@@ -380,7 +380,7 @@ void OS_SVC(int* Stack_Frame)
 
 		break;
 	case SVC_TaskWaitingTime:
-		MyRTOS_Update_Schadule_tables();
+		MyRTOS_Update_Sch();
 
 
 		break;
@@ -423,6 +423,76 @@ RTOS_Error_ID RTOS_Terminate_Task (TCB_RTOS* Tref)
 	MYRTOS_OS_SVC_Set(SVC_terminateTask);
 }
 
+RTOS_Error_ID RTOS_Task_Wait(unsigned int TICKS,TCB_RTOS* Task)
+{
+	Task->TimeWait.Blocking = enable ;
+	Task->TimeWait.TimeTicks = TICKS ;
+	// Task Should be blocked
+	Task->TaskState = Suspended ;
+	//to be suspended immediately
+	MYRTOS_OS_SVC_Set(SVC_terminateTask);
+
+}
+
+void RTOS_Task_Update_Wtime(){
+	for (int i =0; i < OS_Control.NoOfActiveTasks ; i++  )
+		{
+			if (OS_Control.OSTasks[i]->TaskState == Suspended) //it is blocking until meet the time line
+			{
+				if (OS_Control.OSTasks[i]->TimeWait.Blocking == enable)
+				{
+					OS_Control.OSTasks[i]->TimeWait.TimeTicks-- ;
+					if (OS_Control.OSTasks[i]->TimeWait.TimeTicks == 1)
+					{
+						OS_Control.OSTasks[i]->TimeWait.Blocking = disable ;
+						OS_Control.OSTasks[i]->TaskState = Waiting ;
+						MYRTOS_OS_SVC_Set(SVC_TaskWaitingTime);
+					}
+				}
+			}
+		}
+}
+
+RTOS_Error_ID RTOS_Acquire_Mutex(TCB_RTOS* Task,Mutex_t* Mutex){
+
+		if(Mutex->CurrentTUser == NULL){
+			Mutex->CurrentTUser = Task;
+		}
+		else{
+			if(Mutex->NextTUser == NULL){
+				Mutex->NextTUser = Task;
+
+				Task->TaskState = Suspended ;
+
+				MYRTOS_OS_SVC_Set(SVC_terminateTask);
+			}
+			else{
+				return Error;
+			}
+		}
+		return success;
+}
+RTOS_Error_ID RTOS_Release_Mutex(Mutex_t* Mutex){
+
+	if(Mutex->CurrentTUser == NULL){
+		return Error;
+	}
+	else {
+		if(Mutex->NextTUser == NULL){
+			Mutex->CurrentTUser = NULL;
+			return success;
+		}
+		else{
+			Mutex->NextTUser->TaskState = Waiting;
+			Mutex->CurrentTUser = Mutex->NextTUser;
+			 Mutex->NextTUser = NULL;
+			 MYRTOS_OS_SVC_Set(SVC_Activatetask);
+			 return success;
+		}
+	}
+
+
+}
 
 
 RTOS_Error_ID RTOS_Start()

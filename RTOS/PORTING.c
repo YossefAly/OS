@@ -84,10 +84,13 @@ void SysTick_Handler(void)
 {
 	SysTickLED ^= 1 ;
 
+	RTOS_Task_Update_Wtime();
 	//Determine Pcurrent & Pnext
 	Decide_whatNext();
 	//Switch Context & restore
 	trigger_OS_PendSV();
+
+	SysTickLED ^= 1 ;
 
 }
 
